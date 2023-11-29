@@ -2,6 +2,7 @@
 
 library(tidyverse)
 library(ez)
+library(BayesFactor)
 
 dframe <-
   read_csv('./cfs_synesthesia.csv') %>%
@@ -36,41 +37,41 @@ cat(c('remove cases: ', union(crit1, crit2)), '\n')
 dframe = dframe %>%
   filter(! vp %in% union(crit1, crit2))
 
-# overall valid responses
-ezdat = dat %>%
+# overall valid responses and accuracy
+ezdat = dframe %>%
   group_by(vp) %>%
-  summarize(avg = sum(na)/length(na))
+  summarize(avg = sum(is.na(response))/length(response))
 cat('valid responses (M +- SD): ', 1-mean(ezdat$avg), '+-', sd(ezdat$avg), '\n')
 
 # overall accuracy
-ezdat = dat %>%
+ezdat = dframe %>%
   group_by(vp) %>%
-  filter(na==F) %>%
+  filter(!is.na(response)) %>%
   summarize(avg = sum(correct)/length(correct))
 cat('accuracy (M +- SD): ', mean(ezdat$avg), '+-', sd(ezdat$avg), '\n')
 
-# nochmal pro stimulusbedingung
-ezdat = dat %>%
-  group_by(vp, graphtype) %>%
-  summarize(avg = sum(na)/length(na))
-aggregate(ezdat$avg, FUN=mean, by = list(ezdat$graphtype))
 
-# overall accuracy
-ezdat = dat %>%
-  group_by(vp, graphtype) %>%
-  filter(na==F) %>%
+## per condition, valid and accuracy
+ezdat = dframe %>%
+  group_by(vp, stimulus) %>%
+  summarize(avg = sum(is.na(response))/length(response))
+aggregate(ezdat$avg, FUN=mean, by = list(ezdat$stimulus))
+
+ezdat = dframe %>%
+  group_by(vp, stimulus) %>%
+  filter(!is.na(response)) %>%
   summarize(avg = sum(correct)/length(correct))
-aggregate(ezdat$avg, FUN=mean, by = list(ezdat$graphtype))
+aggregate(ezdat$avg, FUN=mean, by = list(ezdat$stimulus))
 
 
 # RT distributions, syn vs. control
-przdat =  dat %>%
+przdat =  dframe %>%
   filter(correct == 1) %>%
   group_by(vp, group)
 
 desiredquantiles = seq(0.05,0.95,0.05)
-nparticipants1 = length(unique(przdat$vp[przdat$group == 'syn']))
-nparticipants2 = length(unique(przdat$vp[przdat$group == 'ctr']))
+nparticipants1 = length(unique(przdat$vp[przdat$group == 'synesthete']))
+nparticipants2 = length(unique(przdat$vp[przdat$group == 'control']))
 nconditions   = 2
 
 quantdata1 = data.frame(avg = numeric(nparticipants1)/0) # 8 conditions, pre-allocate
@@ -78,13 +79,13 @@ quantdata2 = data.frame(avg = numeric(nparticipants2)/0) # 8 conditions, pre-all
 
 for (i in 1:length(desiredquantiles)){
   quantdata1[,i] =  przdat %>%
-    filter(group == 'syn') %>%
+    filter(group == 'synesthete') %>%
     summarize(avg = quantile(RT, desiredquantiles[i]))%>%
     ungroup() %>%
     select(avg)
 
   quantdata2[,i] =  przdat %>%
-    filter(group == 'ctr') %>%
+    filter(group == 'control') %>%
     summarize(avg=quantile(RT, desiredquantiles[i]))%>%
     ungroup() %>%
     select(avg)}
@@ -106,13 +107,13 @@ text(6, 0.6, 'ctr', col='blue')
 text(6, 0.5, 'syn', col='red')
 
 # distribution for inducer and noninducer ==========
-przdat =  dat %>%
+przdat =  dframe %>%
   filter(correct == 1) %>%
   group_by(vp, group)
 
 desiredquantiles = seq(0.05,0.95,0.05)
-nparticipants1 = length(unique(przdat$vp[przdat$group == 'syn']))
-nparticipants2 = length(unique(przdat$vp[przdat$group == 'ctr']))
+nparticipants1 = length(unique(przdat$vp[przdat$group == 'synesthete']))
+nparticipants2 = length(unique(przdat$vp[przdat$group == 'control']))
 nconditions   = 2
 
 quantdata1 = data.frame(avg = numeric(nparticipants1)/0) # 8 conditions, pre-allocate
@@ -127,23 +128,23 @@ gquantdata2 = data.frame(avg = numeric(nparticipants2)/0) # 8 conditions, pre-al
 
 for (i in 1:length(desiredquantiles)){
   quantdata1[,i] =  przdat %>%
-    filter(group == 'syn' & graphtype == 'inducer') %>%
+    filter(group == 'synesthete' & stimulus == 'inducer') %>%
     summarize(avg = quantile(RT, desiredquantiles[i]))%>%
     ungroup() %>%
     select(avg)
   quantdata2[,i] =  przdat %>%
-    filter(group == 'syn' & graphtype == 'noninducer') %>%
+    filter(group == 'synesthete' & stimulus == 'non-inducer') %>%
     summarize(avg=quantile(RT, desiredquantiles[i]))%>%
     ungroup() %>%
     select(avg)
 
   cquantdata1[,i] =  przdat %>%
-    filter(group == 'ctr' & graphtype == 'inducer') %>%
+    filter(group == 'control' & stimulus == 'inducer') %>%
     summarize(avg = quantile(RT, desiredquantiles[i]))%>%
     ungroup() %>%
     select(avg)
   cquantdata2[,i] =  przdat %>%
-    filter(group == 'ctr' & graphtype == 'noninducer') %>%
+    filter(group == 'control' & stimulus == 'non-inducer') %>%
     summarize(avg=quantile(RT, desiredquantiles[i]))%>%
     ungroup() %>%
     select(avg)}
@@ -171,39 +172,115 @@ points(yy, desiredquantiles, type='l', col='black')
 text(6, 0.5, 'ctr-ind', col='red')
 text(6, 0.6, 'ctr-nonind', col='blue')
 
+# RT distribution, gabors
+przdat =  dframe %>%
+  filter(correct == 1 & stimulus == 'gabor') %>%
+  group_by(vp, group)
+
+desiredquantiles = seq(0.05,0.95,0.05)
+nparticipants1 = length(unique(przdat$vp[przdat$group == 'synesthete']))
+nparticipants2 = length(unique(przdat$vp[przdat$group == 'control']))
+nconditions   = 2
+
+quantdata1 = data.frame(avg = numeric(nparticipants1)/0) # 8 conditions, pre-allocate
+quantdata2 = data.frame(avg = numeric(nparticipants2)/0) # 8 conditions, pre-allocate
+
+for (i in 1:length(desiredquantiles)){
+  quantdata1[,i] =  przdat %>%
+    filter(group == 'synesthete') %>%
+    summarize(avg = quantile(RT, desiredquantiles[i]))%>%
+    ungroup() %>%
+    select(avg)
+  
+  quantdata2[,i] =  przdat %>%
+    filter(group == 'control') %>%
+    summarize(avg=quantile(RT, desiredquantiles[i]))%>%
+    ungroup() %>%
+    select(avg)}
+
+xx=apply(quantdata1, 2, mean)
+yy=apply(quantdata2, 2, mean)
+plot(xx, desiredquantiles, ylim=c(0,1), xlim=c(0,8), type='l', col='red', xlab = 'ReactionTime (s)', ylab = 'Quantile', lwd=2)
+points(yy, desiredquantiles, type='l', col='black')
+sexx  = apply(quantdata1, 2, FUN= sd)/sqrt(nparticipants1)
+seqq2 = apply(quantdata2, 2, FUN= sd)/sqrt(nparticipants2)
+yyy = c(desiredquantiles, rev(desiredquantiles))
+xxx  = c(xx-sexx, rev(xx+sexx))
+xxx2 = c(yy-seqq2, rev(yy+seqq2))
+polygon(xxx,yyy,col='indianred', border = 'indianred')
+polygon(xxx2,yyy, col='lightskyblue', border = 'lightskyblue')
+points(xx, desiredquantiles, ylim=c(0,1), xlim=c(0,8), type='l', col='red', lwd=2)
+points(yy, desiredquantiles, type='l', col='blue')
+text(6, 0.6, 'ctr', col='blue')
+text(6, 0.5, 'syn', col='red')
 
 # ANOVA on mean RT differences, select quantile > 0.4 ==========
-ezdat =  dat %>%
-  filter(correct==1 & (graphtype == 'inducer' | graphtype == 'noninducer')) %>%
-  group_by(vp, group, graphtype) %>%
+ezdat =  dframe %>%
+  filter(correct==1 & (stimulus == 'inducer' | stimulus == 'non-inducer')) %>%
+  group_by(vp, group, stimulus) %>%
 #  filter((RT > quantile(RT, 0.4)) & (RT < quantile(RT, 0.8))) %>%
   filter((RT > quantile(RT, 0.4))) %>%
   summarize(avg = mean(RT))
 
-erg1 = ezdat %>% ezANOVA(dv = avg, wid = vp, within = list(graphtype), between = list(group))
-erg2 = ezdat %>% ezStats(dv = avg, wid = vp, within = list(graphtype), between = list(group))
-ezdat %>% ezPlot(dv  = avg, wid = vp, within = list(graphtype), between = list(group),
-                 x=graphtype, col=group, do_lines=F)
+erg1 = ezdat %>% ezANOVA(dv = avg, wid = vp, within = list(stimulus), between = list(group))
+erg2 = ezdat %>% ezStats(dv = avg, wid = vp, within = list(stimulus), between = list(group))
+ezdat %>% ezPlot(dv  = avg, wid = vp, within = list(stimulus), between = list(group), x=stimulus, col=group, do_lines=F)
 print(erg1)
 print(erg2)
 
-
-# ANOVA on mean RT differences for font type, select quantile > 0.4 ==========
-ezdat =  dat %>%
-  filter(correct==1 & (graphtype == 'inducer' | graphtype == 'noninducer')) %>%
-  group_by(vp, group, graphtype) %>%
+# for gabors
+gezdat =  dframe %>%
+  filter(correct==1 & (stimulus == 'gabor')) %>%
+  group_by(vp, group, stimulus) %>%
   #  filter((RT > quantile(RT, 0.4)) & (RT < quantile(RT, 0.8))) %>%
   filter((RT > quantile(RT, 0.4))) %>%
-  ungroup() %>%
-  group_by(vp, group, fonttype) %>%
   summarize(avg = mean(RT))
+gezdat %>% ezANOVA(dv = avg, wid = vp, between = list(group))
+gezdat %>% ezStats(dv = avg, wid = vp, between = list(group))
 
-erg1 = ezdat %>% ezANOVA(dv = avg, wid = vp, within = list(fonttype), between = list(group))
-erg2 = ezdat %>% ezStats(dv = avg, wid = vp, within = list(fonttype), between = list(group))
-ezdat %>% ezPlot(dv  = avg, wid = vp, within = list(graphtype), between = list(group),
-                 x=graphtype, col=group, do_lines=F)
-print(erg1)
-print(erg2)
+## BF
+# erg3 = erg %>%
+#   group_by(vp, group) %>%
+#   summarize(avg = mean(avg))
+
+A = filter(ezdat, group == "synesthete")
+B = filter(ezdat, group == "control")
+
+rg = numeric(nparticipants1)/0; rg[1]=0
+rg2 = rg
+for (n in 2:length(rg)){
+  bfd = ttestBF(A$avg[1:n], B$avg[1:n], paired=F, nullInterval = c(-Inf,0))
+  rg[n] = as.data.frame(bfd)$bf[1]
+  rg2[n] = as.data.frame(bfd)$bf[2]}
+#bfdFINAL = ttestBF(A$avg[1:n], B$avg[1:n], paired=F, nullInterval = c(-Inf,0))
+stopat = min(intersect(c(12:nparticipants1),which(abs(rg)>6)))
+tickis = c(3,10,30,100)
+plot(log(rg), type='b', ylab = 'BF10', xlab = 'n', ylim=c(-5,5), yaxt='n')
+#points(log(rg2), type='b', col='blue')
+abline(h = 0, lty='solid', col='black') # 3, 10, 30, 100
+abline(h = log(6), lty='dashed', col='black') # 3, 10, 30, 100
+abline(v = stopat, lty='dashed', col='black') # 3, 10, 30, 100
+axis(side=4, at=c(-log(tickis),0,log(tickis)), labels=F)
+axis(side=2, at=c(-log(tickis),0,log(tickis)), labels = c(-rev(tickis),0,tickis))
+#oo=rg/rg2
+
+
+# # ANOVA on mean RT differences for font type, select quantile > 0.4 ==========
+# ezdat =  dat %>%
+#   filter(correct==1 & (graphtype == 'inducer' | graphtype == 'noninducer')) %>%
+#   group_by(vp, group, graphtype) %>%
+#   #  filter((RT > quantile(RT, 0.4)) & (RT < quantile(RT, 0.8))) %>%
+#   filter((RT > quantile(RT, 0.4))) %>%
+#   ungroup() %>%
+#   group_by(vp, group, fonttype) %>%
+#   summarize(avg = mean(RT))
+# 
+# erg1 = ezdat %>% ezANOVA(dv = avg, wid = vp, within = list(fonttype), between = list(group))
+# erg2 = ezdat %>% ezStats(dv = avg, wid = vp, within = list(fonttype), between = list(group))
+# ezdat %>% ezPlot(dv  = avg, wid = vp, within = list(graphtype), between = list(group),
+#                  x=graphtype, col=group, do_lines=F)
+# print(erg1)
+# print(erg2)
 
 
 
